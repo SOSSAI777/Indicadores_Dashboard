@@ -9,13 +9,102 @@ import websockets
 import json
 import time
 import threading
+import yfinance as yf
 from typing import Dict, Any, Optional
+from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(
     page_title="SS Consultoria e Assessoria - Indicadores Financeiros",
     page_icon="📈",
     layout="wide"
 )
+
+import yfinance as yf
+
+# =========================================================
+# 🔔 SEÇÃO: CONFIGURAÇÃO DO LETREIRO
+# =========================================================
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("📰 Configurações do Letreiro")
+
+# Reaproveita a lista completa de ativos (caso ainda não tenha sido definida)
+symbols_by_category = {
+    "🇺🇸 Ações EUA": [
+        "AAPL", "GOOGL", "MSFT", "TSLA", "AMZN", "META", "NVDA", 
+        "JPM", "JNJ", "V", "WMT", "PG", "DIS", "NFLX", "BA"
+    ],
+    "🇧🇷 Ações Brasil": [
+        "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBDC4.SA", "WEGE3.SA",
+        "MGLU3.SA", "B3SA3.SA", "ABEV3.SA", "RENT3.SA", "BBDC3.SA"
+    ],
+    "₿ Criptomoedas": [
+        "BTC-USD", "ETH-USD", "ADA-USD", "DOT-USD", "SOL-USD",
+        "DOGE-USD", "XRP-USD", "LTC-USD", "BNB-USD", "MATIC-USD"
+    ],
+    "📊 ETFs": [
+        "SPY", "QQQ", "IVV", "VTI", "GLD"
+    ],
+    "💱 Forex": [
+        "EURUSD=X", "GBPUSD=X", "USDJPY=X", "USDBRL=X", "EURBRL=X"
+    ],
+    "🛢️ Commodities": [
+        "GC=F", "SI=F", "CL=F", "NG=F", "ZC=F"
+    ]
+}
+
+# Flatten de todos os símbolos em uma lista única
+todos_ativos = [s for lista in symbols_by_category.values() for s in lista]
+
+# Multiselect para o usuário escolher
+ativos_escolhidos = st.sidebar.multiselect(
+    "Selecione os ativos que deseja exibir no letreiro:",
+    options=todos_ativos,
+    default=["BTC-USD", "ETH-USD", "AAPL", "PETR4.SA", "USDBRL=X"],
+    help="Escolha os ativos que aparecerão rolando no topo da tela."
+)
+
+# =========================================================
+# 🔹 FUNÇÃO: OBTER PREÇOS
+# =========================================================
+def obter_precos(ativos):
+    precos = {}
+    for ativo in ativos:
+        try:
+            dados = yf.Ticker(ativo).history(period="1d")
+            if not dados.empty:
+                preco = dados["Close"].iloc[-1]
+                variacao = ((dados["Close"].iloc[-1] - dados["Open"].iloc[0]) / dados["Open"].iloc[0]) * 100
+                precos[ativo] = (preco, variacao)
+        except Exception:
+            precos[ativo] = (None, None)
+    return precos
+
+# =========================================================
+# 🔹 EXIBIR LETREIRO NO TOPO
+# =========================================================
+if ativos_escolhidos:
+    precos = obter_precos(ativos_escolhidos)
+    texto_ticker = ""
+    for ativo, (preco, var) in precos.items():
+        if preco is not None:
+            cor = "#00FF88" if var >= 0 else "#FF5555"
+            sinal = "+" if var >= 0 else ""
+            texto_ticker += f"<span style='margin-right:30px; color:{cor}; font-size:16px;'>{ativo}: ${preco:.2f} ({sinal}{var:.2f}%)</span>"
+
+    st.markdown(
+        f"""
+        <div style='background-color:#111; padding:6px; border-radius:5px;'>
+            <marquee behavior="scroll" direction="left" scrollamount="4">
+                {texto_ticker}
+            </marquee>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+else:
+    st.info("Selecione ativos no menu lateral para exibir no letreiro.")
+
 
 # Configuração
 API_BASE_URL = "http://localhost:8000"
